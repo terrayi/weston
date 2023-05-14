@@ -63,6 +63,7 @@ enum clock_format {
 	CLOCK_FORMAT_SECONDS,
 	CLOCK_FORMAT_MINUTES_24H,
 	CLOCK_FORMAT_SECONDS_24H,
+	CLOCK_FORMAT_TIME_ONLY,
 	CLOCK_FORMAT_NONE
 };
 
@@ -402,7 +403,7 @@ panel_clock_redraw_handler(struct widget *widget, void *data)
 		return;
 
 	cr = widget_cairo_create(clock->panel->widget);
-	cairo_set_font_size(cr, 14);
+	cairo_set_font_size(cr, 12);
 	cairo_text_extents(cr, string, &extents);
 	if (allocation.x > 0)
 		allocation.x +=
@@ -417,6 +418,19 @@ panel_clock_redraw_handler(struct widget *widget, void *data)
 	cairo_move_to(cr, allocation.x, allocation.y);
 	cairo_set_source_rgba(cr, 1, 1, 1, 0.85);
 	cairo_show_text(cr, string);
+	{
+		FILE *fp;
+		long unsigned int capacity;
+		char capacity_text[128];
+		fp = fopen("/sys/class/power_supply/BAT0/capacity", "r");
+		if (fp) {
+			fscanf(fp, "%lu", &capacity);
+			fclose(fp);
+			sprintf(capacity_text, "%ld%s", capacity, "%");
+			cairo_move_to(cr, allocation.x, allocation.y - 20);
+			cairo_show_text(cr, capacity_text);
+		}
+	}
 	cairo_destroy(cr);
 }
 
@@ -474,6 +488,10 @@ panel_add_clock(struct panel *panel)
 		clock->format_string = "%a %b %d, %H:%M:%S";
 		clock->refresh_timer = 1;
 		break;
+	case CLOCK_FORMAT_TIME_ONLY:
+		clock->format_string = "%H:%M";
+		clock->refresh_timer = 60;
+		break;
 	case CLOCK_FORMAT_NONE:
 		assert(!"not reached");
 	}
@@ -510,7 +528,9 @@ panel_resize_handler(struct widget *widget,
 		first_pad_h = first_pad_w = 0;
 	}
 
-	if (panel->clock_format == CLOCK_FORMAT_SECONDS)
+	if (panel->clock_format == CLOCK_FORMAT_TIME_ONLY)
+		w = 40;
+	else if (panel->clock_format == CLOCK_FORMAT_SECONDS)
 		w = 170;
 	else /* CLOCK_FORMAT_MINUTES and 24H versions */
 		w = 150;
@@ -565,6 +585,9 @@ panel_configure(void *data,
 			break;
 		case CLOCK_FORMAT_SECONDS:
 			width = 170;
+			break;
+		case CLOCK_FORMAT_TIME_ONLY:
+			width = 40;
 			break;
 		}
 		break;
@@ -1487,6 +1510,8 @@ parse_clock_format(struct desktop *desktop, struct weston_config_section *s)
 		desktop->clock_format = CLOCK_FORMAT_MINUTES_24H;
 	else if (strcmp(clock_format, "seconds-24h") == 0)
 		desktop->clock_format = CLOCK_FORMAT_SECONDS_24H;
+	else if (strcmp(clock_format, "time-only") == 0)
+		desktop->clock_format = CLOCK_FORMAT_TIME_ONLY;
 	else if (strcmp(clock_format, "none") == 0)
 		desktop->clock_format = CLOCK_FORMAT_NONE;
 	else
